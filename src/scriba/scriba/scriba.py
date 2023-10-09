@@ -6,9 +6,26 @@ import csv
 class DbManager:
     # the exsistence of the table is taken as an assunption
     # but during initialization if the table doesn't exist is not a problem
-    def __init__(self, db: str, table: str) -> None:
+    def __init__(self,
+                 db: str,
+                 source: str,
+                 reference_table: str, # used in case of data should be organized through a reference table
+                 resolution: Optional[str] = None, # used in case of OHLC data
+                 table: Optional[str] = None) -> None:
+
             self.db = db
-            self.table = table
+            self._table = table
+            self.source = source
+            self.reference_table = reference_table
+            self.resolution = resolution
+
+    @property
+    def table(self) -> str:
+        return self._table
+
+    @table.setter
+    def table(self, new_table : str) -> None:
+        self._table = new_table
 
     @staticmethod
     def _type_map() -> Dict[type, str]:
@@ -37,7 +54,7 @@ class DbManager:
             return py_to_sql_string.get(mysql_type)
         if isinstance(mysql_type, bytes):
             return byte_type_mapping.get(mysql_type, None)
-        
+
         raise TypeError(f'{mysql_type} must be bytes or str')
 
     def _map_py_to_sql(self, py_type: Union[str, int, float]) -> Optional[str]:
@@ -166,6 +183,9 @@ class DbManager:
             crs.execute(query(table= self.table, command= mod_column), multi=multi_flag(mod_column))
             print(f'query di alter2 \n\n{query(self.table, mod_column)}\n')
 
+    # this method should be renamed as '_insert_data' because there's a new method 
+    # that insert data using to the ref table
+
     def _insert(self, crs: MySQLCursorAbstract, data: Dict[str, List[Union[str, float, int]]] = None) -> None:
 
         """sql query to insert data"""
@@ -186,6 +206,28 @@ class DbManager:
         print(insert_query)
 
         crs.executemany(insert_query, values_to_insert)
+    
+    def _get_id(self,
+                meta_table : str,
+                meta_id_column: str,
+                meta_value_column: str,
+                value: str,
+                crs: MySQLCursorAbstract,
+                cnx : mtor.MySQLConnection,
+                ) -> int:
+
+        """takes a meta table name as input, checks if name is in table then return its ID or raise an error if not"""
+
+        query = f"SELECT {meta_id_column} FROM {meta_table} WHERE {meta_value_column} = '{value}'"
+
+        crs.execute(query)
+        result = crs.fetchone()
+
+        return result # result should be returned properly sliced and casted to a string 
+
+    def _insert_meta(self) -> None:
+        self._get_id()
+
 
     def create(self, crs: MySQLCursorAbstract) -> None:
 
